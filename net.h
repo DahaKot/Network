@@ -24,7 +24,7 @@
 #define KA_CNT		1
 
 static const char SIG = 246;
-static const int INET_TIMEOUT = 1000;
+static const int INET_TIMEOUT = 10000;
 static const size_t BUF_SIZE = 1024;
 static const size_t s_udp_port = 4001;
 static const size_t w_udp_port = 4002;

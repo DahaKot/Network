@@ -64,7 +64,18 @@ int main(int argc, char **argv) {
 		FD_SET(tcp_sk, &set);
 
 		int ret = -1;
-		ret = select(tcp_sk + 1, &set, NULL, NULL, NULL);
+		struct timeval tv = {
+	        .tv_usec    = INET_TIMEOUT
+	    };
+		ret = select(tcp_sk + 1, &set, NULL, NULL, &tv);
+		if (ret < 0) {
+			printf("select gave an error\n");
+			return -1;
+		}
+		if (ret == 0) {
+			printf("selec time out\n");
+			return -1;
+		}
 		
 		struct sockaddr_in workers_addr;
 		socklen_t workers_addr_size = sizeof(workers_addr);
