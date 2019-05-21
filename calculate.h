@@ -21,7 +21,7 @@ struct task {
 	double end;
 };
 
-int spread_jobs (int n, int n_real_procs, int *real_procs, double start, double end);
+double calculate (int n, int n_real_procs, int *real_procs, double start, double end);
 int get_real_procs(int n_proc, int *real_procs);
 int in_array(int x, int *arr, int len);
 void *useful_routine(void *arg);

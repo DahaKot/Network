@@ -67,6 +67,12 @@ int create_tcp_socket() {
 		return -1;
 	}
 
+	errno = 0;
+	if(keep_alive_enable(tcp_sk) < 0) {
+		printf("error on %d: %s\n", __LINE__, strerror(errno));
+		return -1;
+	}
+
 	struct sockaddr_in tcp_addr = {
 		.sin_family = AF_INET,
 		.sin_port = htons(s_tcp_port),
@@ -182,7 +188,7 @@ int tcp_connect(struct sockaddr_in *starter_addr) {
 
 	errno = 0;
 	int connect_ret = connect(tcp_sk, starter_addr, sizeof(*starter_addr));
-	if (connect_ret < 0 && errno == EINPROGRESS) {//
+	if (connect_ret < 0 && errno == EINPROGRESS) {
 		errno = 0;
 		if(select(tcp_sk + 1, NULL, &set, NULL, &tv) < 0) {
 			if(errno != 0) {
@@ -224,6 +230,8 @@ int tcp_connect(struct sockaddr_in *starter_addr) {
 		close(tcp_sk);
 		return -1;
 	}
+
+	printf("errno %s\n", strerror(errno));
 
 	return tcp_sk;
 }
@@ -299,4 +307,24 @@ int tcp_read(int fd, void *buf, size_t size) {
 	}
 
 	return ret;
+}
+
+int init_sig_actions() {
+	struct sigaction ignore_action = {};
+	ignore_action.sa_handler = SIG_IGN;
+
+	sigaction (SIGPIPE, &ignore_action, NULL);
+	sigaction (SIGURG, &ignore_action, NULL);
+
+	struct sigaction exit_action = {};
+	exit_action.sa_handler = sigIO_handler;
+
+	sigaction (SIGIO, &exit_action, 0);
+
+	return 0;
+}
+
+void sigIO_handler(int signal) {
+	printf("sigIO caught\n");
+	exit(1);
 }

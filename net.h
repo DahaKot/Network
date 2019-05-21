@@ -17,6 +17,7 @@
 #include <arpa/inet.h>
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
+#include <signal.h>
 
 #define KA_VAL		1
 #define KA_IDLE		1
@@ -24,7 +25,7 @@
 #define KA_CNT		1
 
 static const char SIG = 246;
-static const int INET_TIMEOUT = 10000;
+static const int INET_TIMEOUT = 5000000;
 static const size_t BUF_SIZE = 1024;
 static const size_t s_udp_port = 4001;
 static const size_t w_udp_port = 4002;
@@ -41,5 +42,8 @@ int keep_alive_enable(int sk);
 int set_own(int sk);
 int tcp_write(int fd, void *buf, size_t size);
 int tcp_read(int fd, void *buf, size_t size);
+
+int init_sig_actions();
+void sigIO_handler(int signal);
 
 #endif

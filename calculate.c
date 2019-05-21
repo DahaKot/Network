@@ -1,6 +1,6 @@
 #include "calculate.h"
 
-int spread_jobs (int n, int n_real_procs, int *real_procs, double start, double end) {
+double calculate (int n, int n_real_procs, int *real_procs, double start, double end) {
 	// int n = strtol(argv[1], NULL, 10);
 	// int n_proc = get_nprocs();
 	// int *real_procs = (int *) calloc(n_proc, sizeof(int));
@@ -48,7 +48,7 @@ int spread_jobs (int n, int n_real_procs, int *real_procs, double start, double 
 
 	printf("sum: %lg\n", sum);
 
-	return 0;
+	return sum;
 }
 
 void *useful_routine(void *arg) {
