@@ -28,7 +28,7 @@ static const int INET_TIMEOUT = 1000;
 static const size_t BUF_SIZE = 1024;
 static const size_t s_udp_port = 4001;
 static const size_t w_udp_port = 4002;
-static const size_t s_tcp_port = 4242;
+static const size_t s_tcp_port = 4246;
 static const size_t w_tcp_port = 4243;
 
 int call_workers();

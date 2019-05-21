@@ -31,6 +31,8 @@ int main(int argc, char **argv) {
 
 	int n_workers = strtol(argv[1], NULL, 10);
 
+	printf("%d %d %d %d\n", s_udp_port, w_udp_port, s_tcp_port, w_tcp_port);
+
 	/*
 	0. get and set tcp socket #
 	1. send to workers anything UDP #

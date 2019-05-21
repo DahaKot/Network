@@ -18,6 +18,8 @@ int main(int argc, char **argv) {
 	5. send results to starter
 	*/
 
+	printf("%d %d %d %d\n", s_udp_port, w_udp_port, s_tcp_port, w_tcp_port);
+
 	struct sockaddr_in starter_addr;
 	
 	printf("get starter addr %d\n", get_starter_addr(&starter_addr));
