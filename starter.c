@@ -8,15 +8,20 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include "calculate.h"
+#include "net.h"
 
-const char SIG = 246;
-const size_t BUF_SIZE = 1024;
-const size_t s_udp_port = 4001;
-const size_t w_udp_port = 4002;
-const size_t s_tcp_port = 4242;
-const size_t w_tcp_port = 4243;
+struct worker {
+	double start;
+	double end;
+	int n_usefull_threads;
+	int fd;
+};
 
-int call_workers();
+const double low = 0;
+const double high = 100;
+
+int spread_tasks(struct worker *workers, int n_workers, int total_threads);
 
 int main(int argc, char **argv) {
 	if (argc != 2) {
@@ -27,129 +32,96 @@ int main(int argc, char **argv) {
 	int n_workers = strtol(argv[1], NULL, 10);
 
 	/*
-	0. get and set tcp socket
+	0. get and set tcp socket #
 	1. send to workers anything UDP #
-	2. get from workers their addrs TCP
+	2. get from workers their sks and number of cores TCP #
 	3. spread work on workers:
 		3.1. send to certain worker its number
 	4. get results
 	*/	
 
-	errno = 0;
-	int tcp_sk = socket(AF_INET, SOCK_STREAM, 0);
-	if (tcp_sk == -1) {
+	int tcp_sk = create_tcp_socket();
+	if (tcp_sk < 0) {
+		printf("error on %d: %s\n", __LINE__, strerror(errno));
+		return -1;
+	}
+	printf("create_tcp_socket returned %d\n", tcp_sk);
+
+	if (call_workers() < 0) {
 		printf("error on %d: %s\n", __LINE__, strerror(errno));
 		return -1;
 	}
 
-	int val = 1;
-	errno = 0;
-	if (setsockopt(tcp_sk, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
+	struct worker *workers = calloc(n_workers, sizeof(struct worker));
+
+	int total_threads = 0;
+
+	for (int i = 0; i < n_workers; i++) {
+		fd_set set;
+		FD_ZERO(&set);
+		FD_SET(tcp_sk, &set);
+
+		int ret = -1;
+		ret = select(tcp_sk + 1, &set, NULL, NULL, NULL);
+		
+		struct sockaddr_in workers_addr;
+		socklen_t workers_addr_size = sizeof(workers_addr);
+
+		int tcp_fd = accept(tcp_sk, &workers_addr, &workers_addr_size);
+		if (tcp_fd == -1) {
+			printf("error on %d: %s\n", __LINE__, strerror(errno));
+			return -1;
+		}
+
+		if(keep_alive_enable(tcp_fd) < 0) {
+			printf("error on %d: %s\n", __LINE__, strerror(errno));
+
+			close(tcp_fd);
+			return -1;
+		}
+		if(set_own(tcp_fd) < 0) {
+			printf("error on %d: %s\n", __LINE__, strerror(errno));
+				
+			close(tcp_fd);
+			return -1;
+		}
+
+		workers[i].fd = tcp_fd;
+
+		if (tcp_read(tcp_fd, &(workers[i].n_usefull_threads), 
+					sizeof(workers[i].n_usefull_threads)) < 0) {
+			printf("error on %d: %s\n", __LINE__, strerror(errno));
+			return -1;
+		}
+		printf("%dth has %d cores(or threads)\n", i, workers[i].n_usefull_threads);
+
+		total_threads += workers[i].n_usefull_threads;
+	}
+
+	if (spread_tasks(workers, n_workers, total_threads) < 0) {
 		printf("error on %d: %s\n", __LINE__, strerror(errno));
 		return -1;
 	}
 
-	struct sockaddr_in tcp_addr = {
-		.sin_family = AF_INET,
-		.sin_port = htons(s_tcp_port),
-		.sin_addr =  INADDR_ANY
-	};
+	for (int i = 0; i < n_workers; i++) {
+		struct task this_task;
+		this_task.start = workers[i].start;
+		this_task.end = workers[i].end;
 
-	errno = 0;
-	if (bind(tcp_sk, &tcp_addr, sizeof(tcp_addr)) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
+		if (tcp_write(workers[i].fd, &this_task, sizeof(struct task)) < 0) {
+			printf("error on %d: %s\n", __LINE__, strerror(errno));
+			return -1;
+		}
 	}
-
-	errno = 0;
-	if (listen(tcp_sk, 256) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-	//now tcp_sk is in listening state
-
-	printf("call_workers %d\n", call_workers());
-
-	fd_set set;
-    FD_ZERO(&set);
-    FD_SET(tcp_sk, &set);
-
-    int ret = -1;
-    printf("before select\n");
-    ret = select(tcp_sk + 1, &set, NULL, NULL, NULL);
-    printf("after select\n");
-    fflush(stdout);
-
-	struct sockaddr_in workers_addr;
-	socklen_t workers_addr_size = sizeof(workers_addr);
-
-	int tcp_fd = accept(tcp_sk, &workers_addr, &workers_addr_size);
-	if (tcp_fd == -1) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-
-	char buf = 1;
-
-	write(tcp_fd, &buf, 1);
-
-	// errno = 0;
-	// err = recvfrom(sk, &worker_addr, sizeof(worker_addr), 0, 
-	// 				&_addr, &host_addr_size);
-	// printf("recvfrom returned %d %s\n", err, strerror(errno));
 
 	return 0;
 }
 
-int call_workers() {
-	//create udp_socket
-	errno = 0;
-	int udp_sk = socket(AF_INET, SOCK_DGRAM, 0);
-	if (udp_sk == -1) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
+int spread_tasks(struct worker *workers, int n_workers, int total_threads) {
+	double step = (high - low) / total_threads;
+
+	for (int i = 0; i < n_workers; i++) {
+		workers[i].start = low + i*step;
+		workers[i].end = low + (i + workers[i].n_usefull_threads)*step;
 	}
-	
-	//set udp_socket to broadcast regime
-	int val = 1;
-	errno = 0;
-	if (setsockopt(udp_sk, SOL_SOCKET, SO_BROADCAST, &val, sizeof(val)) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-	
-	int val1 = 1;
-	errno = 0;
-	if (setsockopt(udp_sk, SOL_SOCKET, SO_REUSEADDR, &val1, sizeof(val1)) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-
-	struct sockaddr_in broadcast_addr = {
-		.sin_family = AF_INET,
-		.sin_port = htons(s_udp_port),
-		.sin_addr = INADDR_BROADCAST
-	};
-
-	errno = 0;
-	if (bind(udp_sk, &broadcast_addr, sizeof(broadcast_addr)) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-
-	struct sockaddr_in worker_addr = {
-		.sin_family = AF_INET,
-		.sin_port = htons(w_udp_port),
-		.sin_addr = INADDR_BROADCAST
-	};
-
-	char buf = SIG;
-
-	errno = 0;
-	if (sendto(udp_sk, &buf, sizeof(buf), 0, &worker_addr, sizeof(worker_addr)) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
-
-	return 0;
 }
