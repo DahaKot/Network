@@ -17,6 +17,8 @@ double calculate (int n, int n_real_procs, int *real_procs, double start, double
 
 	void *(*routine) (void *) = useful_routine;
 
+	printf("start %lg end %lg\n", start, end);
+
 	int i = 0;
 	int cur_proc = 0;
 	for (; i < max_n; i++, cur_proc++) {
@@ -54,6 +56,8 @@ double calculate (int n, int n_real_procs, int *real_procs, double start, double
 void *useful_routine(void *arg) {
 	struct thread_param *these_param = (struct thread_param *) arg;
 
+	printf("in thread start %lg end %lg\n", these_param->start, these_param->end);
+
 	double a = these_param->start;
 	double b = these_param->end;
 	double dx = these_param->dx;
@@ -80,14 +84,24 @@ void *empty_routine(void *arg) {
 }
 
 void init(struct thread_param *arr, int n, double start, double end) {
-	double fraq = end / (double) n;
+	double fraq = (end - start) / (double) n;
+
+	printf("n %d\n", n);
+	printf("start %lg\n", start);
+	printf("end %lg\n", end);
+	printf("end - start %lg\n", end - start);
+	printf("fraq %lg\n", fraq);
 
 	arr[0].start = start;
-	arr[0].end = fraq;
+	arr[0].end = start + fraq;
 	arr[0].dx = DX;
 
 	int i = 1;
 	for (; i < n; i++) {
+		printf("i %d\n", i);
+		printf("start %lg\n", arr[i-1].end);
+		printf("end - start %lg\n", end - start);
+		printf("fraq %lg\n", fraq);
 		arr[i].start = arr[i-1].end;
 		arr[i].end = arr[i].start + fraq;
 		arr[i].dx = DX;
