@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <pthread.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/sysinfo.h>
@@ -22,9 +23,11 @@ struct task {
 };
 
 double calculate (int n, int n_real_procs, int *real_procs, double start, double end);
-int get_real_procs(int n_proc, int *real_procs);
-int in_array(int x, int *arr, int len);
 void *useful_routine(void *arg);
 void *useless_routine(void *arg);
 void *empty_routine(void *arg);
+
+int get_real_procs(int n_proc, int *real_procs);
 void init(struct thread_param *arr, int n, double start, double end);
+
+int in_array(int x, int *arr, int len);

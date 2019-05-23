@@ -1,13 +1,3 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/select.h>
-#include <unistd.h>
 #include "calculate.h"
 #include "net.h"
 
@@ -33,8 +23,6 @@ int main(int argc, char **argv) {
 
 	int n_workers = strtol(argv[1], NULL, 10);
 
-	printf("%d %d %d %d\n", s_udp_port, w_udp_port, s_tcp_port, w_tcp_port);
-
 	/*
 	0. get and set tcp socket #
 	1. send to workers anything UDP #
@@ -49,14 +37,10 @@ int main(int argc, char **argv) {
 		printf("error on %d: %s\n", __LINE__, strerror(errno));
 		return -1;
 	}
-	printf("create_tcp_socket returned %d\n", tcp_sk);
-
-	if (call_workers() < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
 
 	struct worker *workers = calloc(n_workers, sizeof(struct worker));
+
+	CHECK_ERROR(call_workers());
 
 	int total_threads = 0;
 
@@ -69,13 +53,15 @@ int main(int argc, char **argv) {
 		struct timeval tv = {
 			.tv_usec    = INET_TIMEOUT
 		};
+
+		errno = 0;
 		ret = select(tcp_sk + 1, &set, NULL, NULL, &tv);
 		if (ret < 0) {
-			printf("select gave an error\n");
+			printf("select gave an error: %s\n", strerror(errno));
 			return -1;
 		}
 		if (ret == 0) {
-			printf("selec time out\n");
+			printf("select time out\n");
 			return -1;
 		}
 		
@@ -83,60 +69,35 @@ int main(int argc, char **argv) {
 		socklen_t workers_addr_size = sizeof(workers_addr);
 
 		int tcp_fd = accept(tcp_sk, &workers_addr, &workers_addr_size);
-		if (tcp_fd == -1) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-			return -1;
-		}
+		CHECK_ERROR(tcp_fd);
 
-		if(keep_alive_enable(tcp_fd) < 0) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-
-			close(tcp_fd);
-			return -1;
-		}
-		if(set_own(tcp_fd) < 0) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-				
-			close(tcp_fd);
-			return -1;
-		}
+		CHECK_ERROR(keep_alive_enable(tcp_fd));
+		CHECK_ERROR(set_own(tcp_fd));
 
 		workers[i].fd = tcp_fd;
 
-		if (tcp_read(tcp_fd, &(workers[i].n_usefull_threads), 
-					sizeof(workers[i].n_usefull_threads)) < 0) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-			return -1;
-		}
-		printf("%dth has %d cores(or threads)\n", i, workers[i].n_usefull_threads);
+		CHECK_ERROR(tcp_read(tcp_fd, &(workers[i].n_usefull_threads), 
+					sizeof(workers[i].n_usefull_threads)));
+		//printf("%dth has %d cores(or threads)\n", i, workers[i].n_usefull_threads);
 
 		total_threads += workers[i].n_usefull_threads;
 	}
 
-	if (spread_tasks(workers, n_workers, total_threads) < 0) {
-		printf("error on %d: %s\n", __LINE__, strerror(errno));
-		return -1;
-	}
+	CHECK_ERROR(spread_tasks(workers, n_workers, total_threads));
 
 	for (int i = 0; i < n_workers; i++) {
 		struct task this_task;
 		this_task.start = workers[i].start;
 		this_task.end = workers[i].end;
 
-		if (tcp_write(workers[i].fd, &this_task, sizeof(struct task)) < 0) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-			return -1;
-		}
+		CHECK_ERROR(tcp_write(workers[i].fd, &this_task, sizeof(struct task)));
 	}
 
 	double result = 0;
 	double w_result = 0;
 	for (int i = 0; i < n_workers; i++) {
 		w_result = 0;
-		if (tcp_read(workers[i].fd, &w_result, sizeof(double)) < 0) {
-			printf("error on %d: %s\n", __LINE__, strerror(errno));
-			return -1;
-		}
+		CHECK_ERROR(tcp_read(workers[i].fd, &w_result, sizeof(double)));
 
 		result += w_result;
 	}
@@ -147,7 +108,16 @@ int main(int argc, char **argv) {
 
 	printf("got result %lg\n", result);
 
+	close(tcp_sk);
+	free(workers);
+
 	return 0;
+
+error:
+	close(tcp_sk);
+	free(workers);
+
+	return -1;
 }
 
 int spread_tasks(struct worker *workers, int n_workers, int total_threads) {

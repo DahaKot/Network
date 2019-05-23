@@ -1,31 +1,43 @@
 #ifndef NET
 #define NET
 
-#include <sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+
 #include <sys/types.h>
 #include <fcntl.h>
 #include <setjmp.h>
 #include <sys/select.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
 #include <sys/syscall.h>
-#define gettid() syscall(SYS_gettid)
 #include <signal.h>
+
+#define gettid() syscall(SYS_gettid)
 
 #define KA_VAL		1
 #define KA_IDLE		1
 #define KA_INTVL	1
 #define KA_CNT		1
 
+#define CHECK_ERROR(code)											\
+	do {															\
+		if (code < 0) {												\
+			printf("error on %d: %s\n", __LINE__, strerror(errno));	\
+			goto error;												\
+		}															\
+	} while(0)
+
 static const char SIG = 246;
 static const int INET_TIMEOUT = 5000000;
+static const int SLEEP_TIME = 1;
 static const size_t BUF_SIZE = 1024;
 static const size_t s_udp_port = 4001;
 static const size_t w_udp_port = 4002;

@@ -1,23 +1,25 @@
 #include "calculate.h"
 
 double calculate (int n, int n_real_procs, int *real_procs, double start, double end) {
-	// int n = strtol(argv[1], NULL, 10);
-	// int n_proc = get_nprocs();
-	// int *real_procs = (int *) calloc(n_proc, sizeof(int));
-	// int n_real_procs = get_real_procs(n_proc, real_procs);
-
 	int max_n = max(n, n_real_procs);
 	int min_n = min(n, n_real_procs);
 
 	pthread_t *threads = (pthread_t *) calloc(n, sizeof(pthread_t));
 	struct thread_param *thread_parameters = (struct thread_param *) calloc(n, sizeof(struct thread_param));
+	
+	//distribute mini-sections between threads
 	init(thread_parameters, min_n, start, end);
+	
 	pthread_attr_t *thread_attributes = (pthread_attr_t *) calloc(n, sizeof(pthread_attr_t));
 	cpu_set_t *cpusets = calloc(n, sizeof(cpu_set_t));
 
 	void *(*routine) (void *) = useful_routine;
 
-	printf("start %lg end %lg\n", start, end);
+	// if number of threads is less than number of procs
+	// 		lets run other procs with useless_routine = while(1) to fight turbobust
+	// else
+	// 		lets run other threads with empty_routine = return not to 
+	// 		waste calculation resources
 
 	int i = 0;
 	int cur_proc = 0;
@@ -48,15 +50,11 @@ double calculate (int n, int n_real_procs, int *real_procs, double start, double
 		sum += thread_parameters[i].res;
 	}
 
-	printf("sum: %lg\n", sum);
-
 	return sum;
 }
 
 void *useful_routine(void *arg) {
 	struct thread_param *these_param = (struct thread_param *) arg;
-
-	printf("in thread start %lg end %lg\n", these_param->start, these_param->end);
 
 	double a = these_param->start;
 	double b = these_param->end;
@@ -86,22 +84,12 @@ void *empty_routine(void *arg) {
 void init(struct thread_param *arr, int n, double start, double end) {
 	double fraq = (end - start) / (double) n;
 
-	printf("n %d\n", n);
-	printf("start %lg\n", start);
-	printf("end %lg\n", end);
-	printf("end - start %lg\n", end - start);
-	printf("fraq %lg\n", fraq);
-
 	arr[0].start = start;
 	arr[0].end = start + fraq;
 	arr[0].dx = DX;
 
 	int i = 1;
 	for (; i < n; i++) {
-		printf("i %d\n", i);
-		printf("start %lg\n", arr[i-1].end);
-		printf("end - start %lg\n", end - start);
-		printf("fraq %lg\n", fraq);
 		arr[i].start = arr[i-1].end;
 		arr[i].end = arr[i].start + fraq;
 		arr[i].dx = DX;
@@ -111,6 +99,7 @@ void init(struct thread_param *arr, int n, double start, double end) {
 int get_real_procs(int n_proc, int *real_procs) {
 	char path[] = "/sys/bus/cpu/devices/cpu0/topology/core_id";
 
+	//parse cpuinfo searching for unique cores and their numbers
 	int n_real_procs = 0;
 	int i = 0;
 	for (; i < n_proc; i++) {
